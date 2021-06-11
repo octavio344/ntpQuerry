@@ -4,12 +4,15 @@ from time import ctime
 import time
 import threading
 import sys
+import csv
+import os
 
 results = [1]
 retries = 0
-delay = 0
+delay = "15"
 host = ""
 alternative = ""
+fileCsv = "./data.csv"
 
 def QuerryToServer(self):
     try:
@@ -21,11 +24,15 @@ def QuerryToServer(self):
         print("Querry result:")
         print(ctime(response.tx_time))
         self.data[0] = response.tx_time
+        logIntoCsv(ctime(response.tx_time))
         #time.sleep(args.delay)
     except (ntplib.NTPException) as e:
-        if alternative ==" ":
-            print("No response from Ntp main server, the alternate server was not configured...\nExiting...")
-            sys.exit(1)
+        if alternative =="":
+            print("No response from Ntp Server retry in "+delay+" sec...")
+            time.sleep(int(delay))
+            QuerryToServer()
+            #print("No response from Ntp main server, the alternate server was not configured...\nExiting...")
+            #sys.exit(1)
         try:
             client = ntplib.NTPClient()
             response = client.request(host)
@@ -67,6 +74,7 @@ def AuxiliaryCounter(self):
         time.sleep(1)
         results[0] = results[0]+1
         timeAux = ctime(results[0])
+        logIntoCsv(timeAux)
         print(timeAux)
         counter = counter + 1
     
@@ -80,6 +88,35 @@ def NtpRequest():
         threadaux.start()
         threadaux.join()
         NtpRequest()
+
+
+#   Esta función recibe los datos del monitoreo y los escribe en el csv (append)
+def logIntoCsv(currentTime):
+    ts = time.time()
+    row = [currentTime,results[0],ts, results[0]-ts]
+    # Abro el archivo
+    with open(fileCsv, 'a', encoding='UTF8') as f:
+        # crea el escritor del archivo csv
+        writer = csv.writer(f)
+        # escribo la row
+        writer.writerow(row)
+
+#   Esta funcion se llama al incio de la ejecucion del programa para limpiar el csv
+#  anterior y establecer las cabeceras
+def initCsv():
+
+    # Checkeo si existe el archivo y si no existe entonces lo creo
+    if not os.path.exists(fileCsv):
+        open(fileCsv, 'a').close()
+    
+    row = ['Time','NtpTimeStamp','LocalTimeStamp','Delta']
+    #  Una vez creado o si existe, limpio el archivo y establezco la cabezera
+    with  open(fileCsv, 'w') as f:
+        # crea el escritor del archivo csv
+        writer = csv.writer(f)
+        # escribo la cabecera
+        writer.writerow(row)
+
 
 if __name__ == '__main__':
     import argparse
@@ -97,9 +134,13 @@ if __name__ == '__main__':
             alternative= args.alternative
         if int(args.delay) < 15:
             raise ntplib.NTPException('Ntp protocol does not allow queries in a period of less than 15 seconds!')
+        delay= args.delay
+        initCsv()    
         NtpRequest()
     except (ntplib.NTPException) as e:
         print('NTP client request error: %s', str(e))
+    except KeyboardInterrupt as e:
+        print('\nFor exit press one more time Ctrl^C..')
     except Exception as e:
         print(e)
 
